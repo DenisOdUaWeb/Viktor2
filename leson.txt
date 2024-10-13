@@ -1,0 +1,510 @@
+
+EVENTS   (if not working restart server)
+
+php artisan make:event NewCustomerHasRegitredEvent (it is just name of event class) 
+ or text it in EventServiceProvider and use php artisan event:generate
+
+then in (Customer)controller :
+//example the new customer was created in create method so inside there we creating event 
+
+event(new EventName($customer)); // customer or any data what we need in constructor
+
+then we need to go to Providers/ EventServiceProvider and registred listeners:
+protected $listen =[
+    NewCustomerHasRegitredEvent::class => [
+        \App\Listeners\WelcomeNewCustomerListener::class,
+        \App\Listeners\RegisterCustomerToNewsletter::class,
+        \App\Listeners\NotifyAdminViaSlack::class,
+        
+    ],
+];
+then you can use the php artisan comand to generate all these files automaticaly:
+php artisan event:generate 
+MAKE SURE :
+All Events and listeners are registraited : php artisan event:list
+Listeners handle(EventClass $event) method using rigth EVENTS Classes (\App\Events\MyEvent) not Providers class
+Also you maybe need to clear CACHE php artisan event:clear
+
+for more info check folders App/EVENTS and App/Listeners
+------------------
+use the queues to dont wait while email sending
+for it you mast add implements ShouldQueue to the listener:
+class WelcomeNewCustomerListener implements ShouldQueue (// ADD SOME JOBS IN TO THE QUEUE)
+then change the driver in .env file (production - redis, dev - sync, test database)
+so database now:
+php artisan queue:table (it will make a migratetion for database (jobs table))
+then:
+php artisan migrate to create a table
+then to make it work you need a worker:::
+php artisan queue:work
+
+to make worker working non stop (process) 
+php artisan queue:work &  // not working in -v 10
+to check jobs // not working mayby because we nned to create jobs(artisan)
+jobs 
+
+_______________________________________________
+COMMANDS  (if not working restart server)
+
+creating console commands 
+php arisan make:command ComandName   (help) creating new  artisan command
+it will make new class in  \App\console\commands
+inside there:
+the command: and options (name is required)
+$signature = 'app:create-company {name} {phone=N/A}'; // OR {phone?} // it will make phone optional 
+you can chec it with :
+php artisan help app:create-company
+you can make signature :
+'my_commands:create_company'
+
+and use it like this :
+php artisan my_commands:create-create_company "New company" "123-123-1234"
+also we can use  ASK(); AND CONFIRM () methods
+$phone = $this->ask("What is th company phone number?");
+        if ($this->confirm("are you sure the phone is .$phone. ?")){
+ OR we can make commands in routes/console.php 
+ Artisan::command("app-commands:clean", function(){
+    $this->info('Cleaning in procces ;\)  !');
+ });   
+
+ also we can realy delete all the companies without customers like this:
+inside route/console.php : 
+using 'get', 'each' and 'delete' methods -> :
+ Artisan::command("app-commands:clean", function(){
+    $this->info('Cleaning in procces ;\)  !');
+    //dd(Company::whereDoesntHave('customers')->get());
+    Company::whereDoesntHave('customers')->
+    get()->
+    each(function($company){
+        $company->delete();
+
+        $this->warn('Deleted: '.$company->name.' !');
+    });
+ })->describe('Cleans up unused companies'); 
+
+ _______________________________________________
+ MODEL FACTORIES    (if not working restart server)
+
+php artisan make:factory CompanyFactory -m Company (example) (based on Company model)
+
+ laravel has USER FACTORY 
+ so to use it  to create the user you can type (inside the tinker OR INSIDE SEEDER FILES) 
+ php artisan tinker
+ facrtory (\App\User::class)->create();
+BUT NOT IN LARAVEL 8+
+In Laravel 8, the factory helper is no longer available. Your Thread model class should use HasFactory trait, then you can use your factory like this:
+
+if not working 
+(composer require laravel/legacy-factories )->for -v 8+  (NO NEED)
+
+in laravel v8+ or v10 
+User::factory()->count(5)->create();   //it will create 5 new random(FACKER) users
+'name' => fake()->name(), // fake()
+ClassName::factory()->count(50)->create(); //ClassName-> it is yor call like User
+However, if you prefer to use the Laravel 7.x style factories, you can use the package laravel/legacy-factories You may install it with composer:
+composer require laravel/legacy-factories
+
+User::factory()->create(); //only one
+ALSO WE CAN OVERWRITE ANY FIELDS LIKE SO :::
+User::factory()->create([
+    'email' => 'admin@admin.com', // just pass the array of data 
+]);
+//it will create the user with email admin@admin.com
+
+making new factory  for our company model: ->
+php artisan make:factory CompanyFactory -m Company
+
+inside there enough to add 
+return [
+            'name' => fake()->company,      // or company() , or name or .... ?
+            'phone' => fake()->unique()->phoneNumber(),
+        ];
+
+then use: -> 
+Company::factory()->count(5)->create();
+
+_______________________________________________
+SEEDERS  (if not working restart server)
+
+same way you can add all together with the seeders :
+in the database folder we have seeds 
+just add something like this in DatabaseSeeder.php :::::::
+
+        \App\Models\User::factory(5)->create(); // 5 new users 
+        \App\Models\Company::factory(5)->create(); // 5 new companies
+
+         //\App\Models\User::factory()->create([
+             //'name' => 'Denys',
+             //'email' => 'denis.od.ua.web@gmail.com',
+         //]);
+if you need more make factory first,  then add it to the seeder
+php artisan db:seed
+
+php artisan migrate:fresh --seed (will delete old and make fresh users and so on...)
+ALSO posible:::
+php artisan migrate:refresh --seed
+_______________________________________________
+
+UPLOADING IMAGES
+
+to be able uplod files (images) we nned  to  add encription type to the form :::
+<form nethod="POST" enctype="multipart/form-data">
+this time we need to add enctype inside create.blade and edit.blade (/customers folder)
+
+then we might to use Controller with a store() method
+inside there we must make the validation ()
+then if we have our image (passed by user) 
+laravel knows that is the UploadFile{...} (so its like an OBJECT ) (check with dd())
+so its has a store() method on it
+so we use store ('uploads', 'public') // it's directory 
+then we need to use the artisan command  php artisan storage:link
+php artisan storage:link make the link to app/public/ directory to be able to use it 
+because of this we need to start our paths from /storage/............{{}}..
+
+//controller (validate method) :::
+private function validateRequest()
+    {
+        
+        $validatedData = request()->validate([
+            'name' => 'required | min:3| max:50',
+            'email' => 'required | email',
+            'active' => 'required',
+            'company_id' => 'required'
+        ]);
+
+        if(request()->hasFile('image')){
+            //dd(request()->image);
+            request()->validate([
+                'image' => 'file | image | max:5500',
+            ]);
+        }
+        return $validatedData;
+    }
+    //controller (storeImage() method ):::
+
+    public function storeImage($customer){
+        if(request()->has('image')){
+            $customer->update([
+                'image' => request()->image->store('uploads', 'public'),
+            ]);
+        }
+    }
+
+    call this method inside this store() method :
+    public function store()
+    {
+        $customer = Customer::create($this->validateRequest());
+
+        $this->storeImage($customer); .....
+
+DON`T FORGET php artisan storage:link  !!!!
+php artisan storage:link
+
+AND DONT FORGET TO UPDATE MIGRATION :::
+$table->string('image')->nullable(); // nullable() !!!!
+
+AND DONT FORGET TO CHECK FILLIBLE IN MODEL !!!!!!!!!!!!!!!!!!!!!!!!!!
+if the field not updating or 
+AND DONT FORGET TO CHECK FILLIBLE IN MODEL !!!!!!!!!!!!!!!!!!!!!!!!!!AND DONT FORGET TO CHECK FILLIBLE IN MODEL !!!!!!!!!!!!!!!!!!!!!!!!!!
+AND DONT FORGET TO CHECK FILLIBLE IN MODEL !!!!!!!!!!!!!!!!!!!!!!!!!!
+
+_______________________________________________
+IMAGE RESISING CROPPING (composer first)
+
+PACAGE IMAGE INTERVENTION (http image.intervention.io)
+composer require intervention/image
+then just use it
+
+its FACADES class 
+
+use Intervention\Image\Facades\Image
+
+take the image from the public storage 
+
+$image = Image::kame(public_path('storage' . $customer->image)) -> fit(300, 300);
+fit or crop method .....
+fit(300, 300, null , 'top-left'); // how too fit the image (center is default)
+more info at hte web site image.intervention.io
+$image -> save(); 
+
+_______________________________________________
+QUERIES REFACTORING  ( N + 1 problem )
+
+all() it`s lazy Loading
+to make one query instead of 50 when you call all of the customers 
+dont use ::: Customer::all(); as it is has realtionship with companies it
+will make additional QUERIES to the DB to fetch th companie ID 
+
+ use with() instead (EAGER LOADING )
+$customers = Customer::with('company')->get();
+CHECK IN TELESCOPE (a lot of queries with limit of 1 ) IF THERE IS A LOT OF QUERIES YOU MUST FIX IT 
+its calling EAGER LOADING 
+
+_______________________________________________
+PAGINATION 
+to paginate our customer instead of all() or get() we must use the paginate() method
+
+$customers = Customer::with('company')->paginate(15); // 15 customers at the time
+
+then in the view . blade  (index.blade.php ) 
+use the links() method ::: (after foreach sutomers)
+{{ $customers->links() }}
+
+_______________________________________________
+POLICIES
+
+php artisan help make:policy 
+php artisan make:policy CustomerPolicy -m Customer    //(they attached to the models)(Customer)
+
+it will make Policy folder and file (which is almost ready to use )
+we just choose RESTful method example (create (User $user)) // these users who can create
+inside there ::: 
+
+public function create (User $user) 
+{
+    return in_array($user->email, [
+        'admin@admin.com', // these users who can create
+        'admin2@admin.com', // these users who can create
+    ]);
+}
+
+then inside example store() method (CustomerController)
+
+in the beggining
+
+$this->authorize('create', Customer::class); //...authorize to create Customer...
+
+INside the vew we can use @can 
+@can ('create', \App\Cusstomer::class)
+    here what we can see if we are pass the policy (create() method policy return true)
+@endcan
+we can do this for delite() restful method or any other !
+
+also we can use the middleware('can:view,customer') in the route file 
+to be able to choise who can see the details of the customer(example)
+
+@can 
+    <a href .... 
+@endcan
+
+@cannot
+    just a text not a link
+@endcannot
+
+to MANUALY register a policy go to ::  AuthServiceProvider
+there ::::>
+
+protected $policies = [
+        //register a policy
+        //added 
+            '\App\Models\Customer' => 'App\Policies\ModelPolicy',
+        //end added
+    ];
+
+___________________________________________ in the anoter project
+RELATION SHIPS 
+in the another project
+
+
+
+___________________________________________
+TESTING TESTING 
+
+its just a function which compare that what we`ve got with what we need 
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+IF WE GAVE TELESCOPE WE DO NEED DISSABLE IT TO USE THE TESTS (PHPUNIT)
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+phpunit is a library for testing (mayy contains the functions (comparing))
+BUT IN VERSION 10 ITS WORKING WITH A TELESCOPE ))) 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+so to run tests run :::
+vendor/bin/phpunit
+
+out test tests in the test/Feature folder 
+
+a names of the tests must be big and understandable what exacly we are testing
+
+for example :::
+
+a_new_user_gets_email_when_it_register 
+
+if test function name not starting from test 
+you need to make anotation like this :::
+/** 
+@test
+*/
+then :::
+public function a_new_user_gets_an_email_when_it_registers
+
+DONT FORGET THIS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/**@test*/ 
+DONT FORGET THIS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+othervise No tests executed!
+No tests executed!No tests executed!
+No tests executed!No tests executed!
+No tests executed!No tests executed!No tests executed!
+DONT FORGET THIS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/**@test*/ 
+DONT FORGET THIS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+RUN ONE of the tests :::
+vendor/bin/phpunit --filter authenticated_users_can_see_the_customers_list
+
+EXAMPLE :::
+
+ public function test_a_customer_can_be_added_through_the_form()
+    {
+        //this will stop events here 
+        Illuminate\Support\Facades\Event::fake();
+
+        //$this->withoutExceptionHandling(); // this if we met some errors 
+        //and we dont need them
+
+        //if this can add the customer :::
+        $this->actingAs(\App\Models\User::factory()->create());
+        //if this can add the customer :::
+        $response = $this->post('/customers',[
+            'name' => 'TestName',
+            'email' => 'email@email.com',
+            'active' => 1,
+            'company_id' => 1,
+        ]);
+        //it mean that we will have 1 new customer in our database
+        //as all data from database clear every time we using the tests 
+        $this -> assertCount(1, \App\Models\Customer::all());
+    }
+
+    //THIS CASE WILL FIRE IVENT 
+    TO PREVENT IT WE CAN JUST DO :::
+    use Illuminate\Support\Facades\Event;
+    Event::fake();
+
+// To run all the tests from the TestClass we can text the class 
+name instead of test name ::
+
+vendor/bin/phpunit --filter CustomersTest
+
+TO MAKE SOMETHING BEFORE TEST LIKE Event::fake();
+we need TO CREATE (overwrite ) PROTECTED FUNCTION SETUP()
+
+so in the begining:::
+
+protected function setUp():void
+{
+    parent::setUp();
+
+    Event::fake();
+}
+IF you needto do something afer your test need to overwrite TEARDOWN() method
+
+protected function tearDown()
+{
+    parent::tearDown();
+    // what to do after test ....
+}
+
+
+next lesson frendly urls
+___________________________________________
+FRENDLY URLs 
+___________________________________________
+
+so if we need to make frendly url for something unique like username, email ect.
+examle will be user email as it only one unique thing that I found
+but if you need you can add unique in the migration on whatever you want 
+we must (can) 
+overwrite getRouteKeyName() in the User model
+
+public function getRouteKeyName() //// testing frendly urls
+    {///
+        return "email";/// only working for unique column from DB !!!!!!
+        //so it will show user email instead of id in url 
+    }///
+then ::::
+$user->email instead of user->id :::::::
+    @foreach($users as $user)
+        <li><a href="/users/{{$user->email}}">{{$user->name}}</a> {{$user->email}}</li>
+    @endforeach
+
+// TO USE FRENLY URLs FOR NOT UNIQUE urls 
+// WE need to make them unique 
+so we using ID first then SLUG ::: like this
+http://127.0.0.1:8000/customers/1-abner-abernathy
+
+so to do this we need to add -{slug} in to the web/ Route file :::::: 
+Route::get('customers/{customer}-{slug}', [CustomersController::class, 'show']);
+
+then IMPORTANT ::: we nned to make path() method (or url or  destination) in the Model
+like so ::::
+
+\App\Models\Customer file ::::>
+
+use Illuminate\Support\Str; // import
+
+public function path()
+    {
+        return url("/customers/{$this->id}-" . Str::slug($this->name));
+    }
+
+THEN we can use this path method in our view like so ::::: >
+
+<a href="{{ $customer->path() }}">{{$customer->name}}</a> 
+
+
+_________________________________________________________
+LANGUAGES 
+so to handle few LANGUAGES on site 
+we need to create lang folder insede resources folder :::
+RESOURCES/LANG/EN
+........./..../ES
+........./..../ru 
+........./..../ua 
+as much as we need 
+and insede every language folders we must have same php file which returning the array with 
+language texts 
+
+<?php
+    return [
+        'main_title_h1' => 'Hello world !',
+        'subtitle_2'   => 'Apple', 
+    ];
+?>
+then inside our view you can just sipmply use it like so :::
+
+<h1>{{__('text.main_title_h1')}}</h1>
+<h1>{{__('text.subtitle_2')}}</h1>
+
+to change the language you need  to use ::: setLocale()function 
+App::setLocale('ru');  //use Illuminate\Support\Facades\App;
+
+we can use this function insede any controller 
+
+TO HAVE A CHANCE MAKE PLURAL VERSION 
+we need ::: 
+'subtitle_2'   => 'Apple | Apples',
+THEN :::
+we need to use another function not __()
+but 
+trans_choice()
+first parametr same like for __() second parametr is quantity of things that we have 
+1 singilar 2 or 10 plural 
+so ::::
+
+trans_choice('text.subtitle_2', 1)  single
+trans_choice('text.subtitle_2', 10)  plural
+
+this second parametr we will use like variable it will depends on something 
+the amount from the DB so::: 
+
+1 person | 10 people  //// we can use like so or whatever .... 
+
+wild cards :::
+'subtitle_2'   => 'Hello :user'  
+then :::
+to use WILD CARDS we need use __() function , second parametr array ['name' => 'Vikror']
+ 'Vikror' can be not hardcoded but  $name variable or $username ....
+like so ::: 
+
+__('text.subtitle_2', ['user', $user])
